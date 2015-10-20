@@ -1,4 +1,4 @@
-#include "learner.h"
+#include "classifier.h"
 #include <sstream>
 
 /*
@@ -6,11 +6,32 @@ g++ -std=c++11 main.cpp classifier.cpp classifier.h ../vowpal_wabbit/vowpalwabbi
 */
 using namespace std;
 
+int instance_count = 0; // global var from classifier.h
+
+void Classifier::process_example(string line){
+	// process example with one classifiers
+    example* ex = VW::read_example(*vw_var, line);	// parse line as training example
+    vw_var->learn(ex);								// process example
+    // cout << VW::get_label(ex) << "\tpred: " << VW::get_prediction(ex) << endl;
+    VW::finish_example(*vw_var, ex);				// important to finish ex!
+}
+
 void Classifier::process_example(vw* vw, string line){
+	// process example with one classifiers
     example* ex = VW::read_example(*vw, line);	// parse line as training example
     vw->learn(ex);								// process example
-    cout << VW::get_label(ex) << "\tpred: " << VW::get_prediction(ex) << endl;
+    // cout << VW::get_label(ex) << "\tpred: " << VW::get_prediction(ex) << endl;
     VW::finish_example(*vw, ex);				// important to finish ex!
+}
+
+void Classifier::process_example(Classifier classifiers[], string line){
+	// process same example with multiple classifiers
+	for (int i=0; i<instance_count; ++i){
+		vw* vw = classifiers[i].get_vw();
+	    example* ex = VW::read_example(*vw, line);	// parse line as training example
+	    vw->learn(ex);								// process example
+	    VW::finish_example(*vw, ex);				// important to finish ex!
+    }				
 }
 
 int Classifier::training(){
