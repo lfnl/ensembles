@@ -17,12 +17,12 @@ class Classifier{
 	- 
 	*/
 	std::string tr_file;
-	vw* vw_var;
 	void process_example(vw* vw, std::string line);
 
 public:
+	vw* vw_var;
 	std::string get_tr_file() {return tr_file;};
-	vw* get_vw(){return vw_var;};
+	// vw* get_vw(){return vw_var;};
 	Classifier(std::string file, vw* vw_arg): tr_file(file), vw_var(vw_arg) {++instance_count;};
 	int training();
 	void process_example(Classifier classifiers[], std::string line);

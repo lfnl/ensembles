@@ -17,7 +17,7 @@ CFLAGS = -std=c++11 -Wall -g
 # define library paths in addition to /usr/lib
 #   if I wanted to include libraries not in /usr/lib I'd specify
 #   their path using -Lpath, something like:
-LFLAGS = -l boost_program_options -l pthread -l z
+LFLAGS = -l boost_program_options -lboost_filesystem -lboost_system -l pthread -l z
 
 # define any libraries to link into executable:
 #   if I want to link in libraries (libx.so or libx.a) I use the -llibname 

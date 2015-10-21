@@ -27,7 +27,7 @@ void Classifier::process_example(vw* vw, string line){
 void Classifier::process_example(Classifier classifiers[], string line){
 	// process same example with multiple classifiers
 	for (int i=0; i<instance_count; ++i){
-		vw* vw = classifiers[i].get_vw();
+		vw* vw = classifiers[i].vw_var;
 	    example* ex = VW::read_example(*vw, line);	// parse line as training example
 	    vw->learn(ex);								// process example
 	    VW::finish_example(*vw, ex);				// important to finish ex!
