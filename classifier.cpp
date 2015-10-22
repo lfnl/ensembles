@@ -48,6 +48,7 @@ int Classifier::training(){
 	return 0;
 }
 
+
 void Classifier::say_hello(){
 	cout << "Hi, I'm a Classifier." << endl;
 }
