@@ -32,12 +32,8 @@ public:
 	// vector<Classifier*> get_all_instances() {return instances;};
 	// vw* get_vw(){return vw_var;};
 	Classifier(std::string file, vw* vw_arg): tr_file(file), vw_var(vw_arg) {++instance_count;};
-	Classifier(std::string file, std::string init_str): tr_file(file), init(init_str){
-		++instance_count;
-		vw_var = VW::initialize(init);
-		instances.push_back(*this);
-	}
-	int training();
+	Classifier(std::string init_str, bool = false);
+	int training(string training_file);
 	void process_example(Classifier classifiers[], std::string line);
 	void process_example(std::string line);
 	vector<float> predict_full_file(string test_file);
@@ -48,7 +44,8 @@ public:
 void train_all_on_same_data(string training_data);
 void predict_from_predictor_files(string predictors_dir);
 vector<vector<float>> predict_from_instances(string test_file, string out_file, bool = false);
-
+void finish_all();
+vector<vector<string>> divide_folds(vector<string> lines, int fold_size, int i, float k);
 void evaluate(string gold_file, vector<float> preds);
 
 #endif

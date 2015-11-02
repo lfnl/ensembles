@@ -5,9 +5,19 @@
 /*
 g++ -std=c++11 main.cpp classifier.cpp classifier.h ../vowpal_wabbit/vowpalwabbit/!(main|active_interactor).cc -l boost_program_options -l pthread -l z
 */
+
+int instance_count = 0;
 using namespace std;
 
 // int instance_count = 0; // global var from classifier.h
+Classifier::Classifier(std::string init_str, bool meta){
+	++instance_count;
+	vw_var = VW::initialize(init_str);
+	if (!meta){
+		instances.push_back(*this);
+	}
+}
+		
 
 void Classifier::process_example(string line){
 	// process example with one classifiers
@@ -35,10 +45,10 @@ void Classifier::process_example(Classifier classifiers[], string line){
     }				
 }
 
-int Classifier::training(){
-	ifstream in(Classifier::get_tr_file());
+int Classifier::training(string training_file){
+	ifstream in(training_file);
 	string line;
-    cout << "...reading " + Classifier::get_tr_file() << endl;				
+    cout << "...reading " + training_file << endl;				
 	while (std::getline(in, line))						// read file linewise
 	{
 	    std::istringstream iss(line);
@@ -89,11 +99,6 @@ void train_all_on_same_data(string training_data){
 	// vw* vw_lda = initialize("--binary --lda 2 --lda_alpha 0.1 --lda_rho 0.1 --lda_D 75963 --minibatch 256 --power_t 0.5 --initial_t 1 -b 16 --cache_file cache/lda.cache --passes 2 -p predictors/lda_predi.dat --readable_model readable_models/lda_topics.dat");
 	// vw* vw_boost = initialize("--binary --boosting 5 -p predictors/boost_predi.dat --cache_file cache/boost.cache");
 	// vw* vw_lin2 = initialize("-c -f predictor.dat --passes 200 --l1 1.9e-06 --sort_features -a");
-
-	Classifier nn(training_data, "--nn 1 -f predictors/nn_predi.dat --readable_model readable_models/nn.dat --cache_file cache/nn.cache");
-	Classifier lin(training_data, "--binary --adaptive --power_t 0.2 -c -f predictors/lin_predi.dat --passes 200 --l1 5e-8 --l2 5e-8 --sort_features --readable_model readable_models/lin.dat --cache_file cache/lin.cache");
-	Classifier boost(training_data, "--binary --boosting 5 -p predictors/boost_predi.dat --cache_file cache/boost.cache");
-
 
 	ifstream in(training_data);
 	string line;
@@ -154,16 +159,17 @@ vector<vector<float>> predict_from_instances(string test_file, string out_file, 
 				if (pred_for_ex.size() == 0){
 					if (save_label_to_file){
 						outfile << get_label(ex) << " ";
+						pred_for_ex.push_back(get_label(ex)); // push true label also to vector
 					}
 					outfile << "| ";
 				}
 				if (ex != nullptr){
 					outfile << pred_for_ex.size() << ":" << get_prediction(ex);
 					pred_for_ex.push_back(get_prediction(ex));
-				    finish_example(*vw, ex);					// important to finish ex!
 				    if(pred_for_ex.size() != instance_count){
 					    outfile << " ";
 				    }
+				    finish_example(*vw, ex);					// important to finish ex!
 				} else {
 					cerr << "example is nullptr!!!" << endl;
 					exit(EXIT_FAILURE);
@@ -177,6 +183,47 @@ vector<vector<float>> predict_from_instances(string test_file, string out_file, 
 	    predictions.push_back(pred_for_ex);
 	}
 	return predictions;
+}
+
+void finish_all(){
+	for (Classifier classifier:instances){
+		vw* vw_inst = classifier.vw_var;
+		if (vw_inst != nullptr){
+			finish(*vw_inst);
+		} else{
+			cerr << "Error while finishing classifier" << endl;
+			exit(EXIT_FAILURE);
+		}
+	}
+}
+
+vector<vector<string>> divide_folds(vector<string> lines, int fold_size, int i, float k){
+	vector<string> tr_set;
+	vector<string> tr_set2;
+	vector<string> test_set;
+	if (i != k-1){
+		// one part of k is the test set -> e.g. [t] [r] [r] [r] [r]
+		vector<string> test_set(lines.begin() + (i*fold_size), lines.begin() + (i*fold_size + fold_size) );
+		cout << "size of slice: " << test_set.size() << endl;
+		// second part of training set
+		vector<string> tr_set2(lines.begin() + (i*fold_size) + fold_size, lines.end());
+		cout << "size of snd tr_slice: " << tr_set2.size() << endl;
+		// first part of training set:
+		vector<string> tr_set(lines.begin(), lines.begin() + (i*fold_size));
+		cout << "size of first tr_slice: " << tr_set.size() << endl;
+		// contruction of training_set
+		tr_set.insert(tr_set.end(), tr_set2.begin(), tr_set2.end());
+		cout << "size of full tr_slice: " << tr_set.size() << endl;
+
+	} else { // special case that last part is test set
+		vector<string> test_set(lines.begin() + (i*fold_size), lines.end() );
+		cout << "size of slice: " << test_set.size() << endl;
+		// first part of training set:
+		vector<string> tr_set(lines.begin(), lines.begin() + (i*fold_size));
+		cout << "size of first tr_slice: " << tr_set.size() << endl;
+	}
+	vector<vector<string>> a = {tr_set, test_set};
+	return a;
 }
 
 void evaluate(string gold_file, vector<float> preds){
