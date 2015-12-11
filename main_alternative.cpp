@@ -22,6 +22,7 @@ void showhelpinfo(char *s){
 int main(int argc, char *argv[]){
 	string pred_name = "stacking";
 	string training_file;
+	string dev_file;
 	string test_file;
 	string binary = "";
 	float k = 5.0; // 5 fold cross validation to train the meta classifier on full data
@@ -30,7 +31,7 @@ int main(int argc, char *argv[]){
 		showhelpinfo(argv[0]);
 	    exit(1);
 	} 
-	while((tmp=getopt(argc,argv,"b:e:h:o:t:k:v"))!=-1){
+	while((tmp=getopt(argc,argv,"b:d:e:h:o:t:k:v"))!=-1){
 		switch(tmp){
 			case 'b':
 				binary = "--binary";
@@ -45,6 +46,10 @@ int main(int argc, char *argv[]){
 			case 't':
 				training_file = optarg;
 				cout << ">> getting training data from " << optarg << endl;
+				break;
+			case 'd':
+				dev_file = optarg;
+				cout << ">> getting development data from " << optarg << endl;
 				break;
 			case 'e':
 				test_file = optarg;
@@ -67,7 +72,7 @@ int main(int argc, char *argv[]){
 	// 				"--readable_model readable_models/meta.dat "+binary+" --cache_file cache/meta.cache", true);		
 	// Classifier meta("--quiet --binary --boosting 20 -f predictors/meta_predi.dat", true);	
 	// Classifier meta("--quiet --binary --nn 160 -f predictors/meta_predi.dat", true);	// works 23.9
-	Classifier meta("--binary --loss_function=logistic",true);
+	Classifier meta("--binary --loss_function=logistic",true); // seldom BAD, 0.16 pr
 
 	ifstream inf(training_file);
 	vector<string> training_full;
@@ -76,40 +81,38 @@ int main(int argc, char *argv[]){
 		training_full.push_back(line);
 	}
 
-	for (int i=0; i<=k; ++i){
-	
-		// init a few base classifiers
-		Classifier squared("--quiet -f predictors/squared"+to_string(i)+".dat --passes 50 --holdout_off --cache_file squared.cache --loss_function squared");
-		Classifier hinge("--quiet -f predictors/hinge"+to_string(i)+".dat --loss_function hinge");
-		Classifier l1(" --quiet -f predictors/hinge"+to_string(i)+".dat --l1 1.2e-06");
-		Classifier nn("--quiet -f predictors/nn"+to_string(i)+".dat --nn 100");
-		// Classifier svm("--quiet -f predictors/svm"+to_string(i)+".dat --binary --ksvm --kernel poly --l2 1.2e-06");
-		Classifier quant("--quiet -f predictors/quant"+to_string(i)+".dat --loss_function quantile --quantile_tau 0.89");
-
-		if (i != k){
-			// divide training data to get dev set
-			int fold_size = ceil(training_full.size()/k);
-			vector<vector<string>> o = divide_folds(training_full, fold_size, i, k);
-			vector<string> training_set = o[0];
-			vector<string> dev_set = o[1];
-			// train base classifiers:
-			train_all_on_same_data(training_set);
-			cout << "num of instantiated base classifiers: " << instances.size() << endl;
-			// save vw readable model of preds for meta learner:
-			vector<string> preds = predict_w_all(dev_set, pred_name +to_string(i)+".pr", true, 4.0); //std way to do it
-			// vector<string> preds = predict_w_all_bayes(dev_set, pred_name +to_string(i)+".pr", stats, true, 4.0); // additional bayes feature
-			finish_all();
-			reset_instances();
-			// train meta learner on data that hasn't been seen by base classifiers
-			meta.training(preds);
-		}
+	ifstream dev_inf(dev_file);
+	vector<string> dev_set;
+	for (unsigned int i=1; getline(dev_inf,line); ++i){
+		dev_set.push_back(line);
 	}
-	// retrain base classifiers on all of the data // or rest of data
-	random_shuffle(training_full.begin(), training_full.end());
+
+	ifstream test_inf(test_file);
+	vector<string> test_set;
+	for (unsigned int i=1; getline(test_inf,line); ++i){
+		test_set.push_back(line);
+	}
+
+	
+	// init a few base classifiers
+	Classifier squared("--quiet -f predictors/squared.dat --passes 50 --holdout_off --cache_file squared.cache --loss_function squared");
+	Classifier hinge("--quiet -f predictors/hinge.dat --loss_function hinge");
+	Classifier l1(" --quiet -f predictors/hinge.dat --l1 1.2e-06");
+	Classifier nn("--quiet -f predictors/nn.dat --nn 100");
+	Classifier quant("--quiet -f predictors/quant.dat --loss_function quantile --quantile_tau 0.89");
+
+	// train base classifiers:
 	train_all_on_same_data(training_full);
-	cout << "num of base classifiers ready to roll: " << instances.size() << endl;
+	cout << "num of instantiated base classifiers: " << instances.size() << endl;
+	// save vw readable model of preds for meta learner:
+	// vector<string> preds = predict_w_all(dev_set, pred_name +to_string(i)+".pr", true, 4.0); //std way to do it
+	vector<string> preds = base_predict(dev_set, pred_name+".pr"); // predict on devset, baseline features also get saved
+	cout << "dev preds length: " << preds.size() << endl;
+	// train meta learner on preds of base classifiers
+	meta.training(preds);
+
 	// predict on test set with baseys
-	vector<string> test_preds = predict_from_instances(test_file, pred_name + "_test_base.pr");
+	vector<string> test_preds = base_predict(test_set, pred_name + "_test_base.pr");
 	// predict with meta on basey preds:
 	meta.predict(test_preds, pred_name + "_test_meta.pr");
 	meta.finish();

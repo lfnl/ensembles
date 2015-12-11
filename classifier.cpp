@@ -106,19 +106,37 @@ vector<float> Classifier::predict(vector<string> test_file, string pred_file){
 	return preds;
 }
 
+vector<float> Classifier::predict(string test_file, string pred_file){
+	ifstream in(test_file);
+	string line;
+
+	ofstream outfile;
+	outfile.open(pred_file, ios::out);
+	vector<float> preds;
+	float prediction;
+
+	while (getline(in, line)){
+		prediction = Classifier::predict(line);
+		preds.push_back(prediction);
+		outfile << prediction << endl;
+	}
+	return preds;
+}
+
+
 
 void Classifier::say_hello(){
 	cout << "Hi, I'm a Classifier." << endl;
+}
+
+void Classifier::finish(){
+	VW::finish(*vw_var);
 }
 
 using namespace VW;
 
 // Classifier* train_all_on_same_data(string training_data){
 void train_all_on_same_data(string training_data){
-	// vw* vw_lda = initialize("--binary --lda 2 --lda_alpha 0.1 --lda_rho 0.1 --lda_D 75963 --minibatch 256 --power_t 0.5 --initial_t 1 -b 16 --cache_file cache/lda.cache --passes 2 -p predictors/lda_predi.dat --readable_model readable_models/lda_topics.dat");
-	// vw* vw_boost = initialize("--binary --boosting 5 -p predictors/boost_predi.dat --cache_file cache/boost.cache");
-	// vw* vw_lin2 = initialize("-c -f predictor.dat --passes 200 --l1 1.9e-06 --sort_features -a");
-
 	ifstream in(training_data);
 	string line;
     cout << "\t...reading training data file " + training_data << endl;				
@@ -129,9 +147,6 @@ void train_all_on_same_data(string training_data){
 			classifier.process_example(line);
 	    }	
 	}
-	// finish(*vw_lin);	// finish if program ends...after prediction...
-	// finish(*vw_nn);
-	// finish(*vw_lda);
 }
 
 void train_all_on_same_data(vector<string> training_data){
@@ -162,6 +177,7 @@ void predict_from_predictor_files(string predictors_dir){
 
 vector<string> predict_from_instances(string test_file, string out_file, bool save_label_to_file){
 	/*
+	make nullptr control in beginning, only if...no else!!!
 	*/
 	// compare to gold
 	ifstream in(test_file);
@@ -250,7 +266,49 @@ vector<string> predict_w_all(vector<string> test_set, string out_file, bool save
 	return predictions;
 }
 
+vector<string> base_predict(vector<string> test_set, string out_file){
+	/*
+	attempt to increase performance by adding output of base to normal example
+	*/
+	ofstream outfile;
+	outfile.open(out_file, ios::out);
+
+	vector<string> predictions;
+
+    cout << "\t...reading test data from vector" << endl;		
+
+	for (string line:test_set){						// read file linewise
+		string example_line = line + " z| ";					// to save preds for one example, copy base features, watch out for space before z
+	    for (int i=0; i<instances.size(); ++i){
+			vw* vw = instances[i].vw_var;
+
+			if (vw == nullptr){
+				cerr << "vw is nullptr! Something went wrong in 'predict'" << endl;
+		    	exit(EXIT_FAILURE);
+		    }
+			example* ex = read_example(*vw, line);		// parse line as training example
+			if (ex == nullptr){
+				cerr << "example is nullptr!!!" << endl;
+				exit(EXIT_FAILURE);
+			}
+
+			example_line += to_string(i) + ":" + to_string(get_prediction(ex));
+			if (i != instances.size()-1){
+				example_line += " ";
+			}
+		    finish_example(*vw, ex);					// important to finish ex!
+		}		    
+	    outfile << example_line << "\n";
+	    predictions.push_back(example_line); // format pred_for_ex: base feats... p1, p2, p3, ...]
+	}
+	return predictions;
+}
+
+
 void finish_all(){
+	/*
+	make nullptr control in beginning, no else!
+	*/
 	for (Classifier classifier:instances){
 		vw* vw_inst = classifier.vw_var;
 		if (vw_inst != nullptr){
@@ -302,12 +360,13 @@ vector<vector<string>> divide_folds(vector<string> lines, int fold_size, int i, 
 	}
 }
 
-void evaluate(string gold_file, vector<float> preds){
-	ifstream in(gold_file);
-	string line;
-    cout << "\t...reading gold data file " + gold_file << endl;		
-	int tp = 0;
-	int total = 0;
+
+// void evaluate(string gold_file, vector<float> preds){
+// 	ifstream in(gold_file);
+// 	string line;
+//     cout << "\t...reading gold data file " + gold_file << endl;		
+// 	int tp = 0;
+// 	int total = 0;
 
 	// for (float x:preds){
 	// 	if(getline(in, line)){
@@ -318,4 +377,4 @@ void evaluate(string gold_file, vector<float> preds){
 	// 	}
 	// }
 	// cout << "ACC: " << tp/total;
-}
+// }
